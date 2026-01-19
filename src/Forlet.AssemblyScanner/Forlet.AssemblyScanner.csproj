@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        
+        <!-- Package Information -->
+        <PackageId>Forlet.AssemblyScanner</PackageId>
+        <Version>1.0.0</Version>
+        <Authors>moamin</Authors>
+        <Company>Whifort</Company>
+        <Description>A lightweight .NET assembly scanner for discovering types by interface implementation or base class inheritance. Features auto-build detection, metadata-only loading, and optimized performance for large projects. Perfect for code generation tools, CLI scaffolders, and build-time analyzers.</Description>
+        <PackageTags>assembly;scanner;reflection;metadata;code-generation;cli;scaffolding;dotnet</PackageTags>
+        <PackageProjectUrl>https://github.com/whifort/Forlet.AssemblyScanner</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/whifort/Forlet.AssemblyScanner</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+
+        <!-- Icon and ReadMe -->
+        <PackageIcon>icon.png</PackageIcon>
+        <ReadmeFile>README.md</ReadmeFile>
+
+		<!-- Build Settings -->
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <NoWarn>$(NoWarn);CS1591</NoWarn> <!-- Disable missing XML comment warnings for internal types -->
+    </PropertyGroup>
+
+	<!-- Allow access to internal classes for testing -->
+	<ItemGroup>
+		<InternalsVisibleTo Include="Forlet.AssemblyScanner.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
+        <PackageReference Include="System.Reflection.MetadataLoadContext" Version="8.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+		<None Include="../../LICENSE" Pack="true" PackagePath="\"/>
+		<None Include="../../icon.png" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+</Project>
