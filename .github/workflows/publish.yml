@@ -1,0 +1,65 @@
+name: Publish to NuGet
+
+on:
+    release:
+        types: [published]  # Triggers when you publish a release
+
+jobs:
+    test:
+        name: Test on ${{ matrix.os }}
+        runs-on: ${{ matrix.os }}
+        
+        strategy:
+            matrix:
+                os: [ubuntu-latest, windows-latest, macos-latest]
+            fail-fast: true  # Stop all if any platform fails
+        
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                  dotnet-version: '8.0.x'
+            
+            - name: Restore dependencies
+              run: dotnet restore
+            
+            - name: Build
+              run: dotnet build --configuration Release --no-restore
+            
+            - name: Run tests
+              run: dotnet test --configuration Release --no-build --verbosity normal
+    
+    publish:
+        name: Build and Publish to NuGet
+        needs: test  # Only runs if all tests pass
+        runs-on: ubuntu-latest
+        
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                  dotnet-version: '8.0.x'
+            
+            - name: Restore dependencies
+              run: dotnet restore
+            
+            - name: Build
+              run: dotnet build --configuration Release --no-restore
+            
+            - name: Pack
+              run: dotnet pack src/Forlet.AssemblyScanner/Forlet.AssemblyScanner.csproj --configuration Release --no-build --output ./nupkg
+            
+            - name: Publish to NuGet
+              run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+            
+            - name: Upload NuGet package as artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: nuget-package
+                  path: ./nupkg/*.nupkg
