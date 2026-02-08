@@ -185,95 +185,11 @@ public sealed class MetadataScanner : IDisposable
     /// </summary>
     private static IEnumerable<string> FindDotNetRuntimePaths(string? targetFrameworkMoniker, string? runtimeVersion)
     {
-        var paths = new List<string>();
+        // 1. Get the directory of the ACTIVE runtime (Resilient & Cross-platform)
+        string runtimeDir = RuntimeEnvironment.GetRuntimeDirectory();
 
-        // Get the target framework version we want (e.g., "8.0")
-        var targetVersion = GetTargetFrameworkVersion(targetFrameworkMoniker) ?? (Environment.Version.Major + ".0");
-
-        // Get DOTNET_ROOT or default installation path
-        var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
-
-        if (string.IsNullOrEmpty(dotnetRoot))
-        {
-            // Default paths based on OS
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                dotnetRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet");
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                dotnetRoot = "/usr/share/dotnet";
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                dotnetRoot = "/usr/local/share/dotnet";
-            }
-        }
-
-        if (string.IsNullOrEmpty(dotnetRoot) || !Directory.Exists(dotnetRoot))
-        {
-            return paths;
-        }
-
-        // Look for runtime in shared/Microsoft.NETCore.App/{version}/
-        var runtimesDir = Path.Combine(dotnetRoot, "shared", "Microsoft.NETCore.App");
-        if (!Directory.Exists(runtimesDir))
-        {
-            return paths;
-        }
-
-        // Find the best matching runtime version
-        string? bestRuntimeDir = null;
-
-        try
-        {
-            if (!string.IsNullOrWhiteSpace(runtimeVersion))
-            {
-                var exactRuntimeDir = Path.Combine(runtimesDir, runtimeVersion);
-                if (Directory.Exists(exactRuntimeDir))
-                {
-                    bestRuntimeDir = exactRuntimeDir;
-                }
-            }
-
-            if (string.IsNullOrEmpty(bestRuntimeDir))
-            {
-                var versionDirs = Directory.GetDirectories(runtimesDir)
-                    .Select(d => new { Path = d, Name = Path.GetFileName(d) })
-                    .Where(d => d.Name.StartsWith(targetVersion) || d.Name.StartsWith(Environment.Version.Major + "."))
-                    .OrderByDescending(d => d.Name)
-                    .ToList();
-
-                if (versionDirs.Count > 0)
-                {
-                    bestRuntimeDir = versionDirs[0].Path;
-                }
-                else
-                {
-                    // Fallback: just get the latest version available
-                    var allVersions = Directory.GetDirectories(runtimesDir)
-                        .OrderByDescending(d => Path.GetFileName(d))
-                        .FirstOrDefault();
-
-                    bestRuntimeDir = allVersions;
-                }
-            }
-        }
-        catch
-        {
-            // Directory enumeration may fail if runtime paths are inaccessible; return partial results
-            return paths;
-        }
-
-        if (!string.IsNullOrEmpty(bestRuntimeDir) && Directory.Exists(bestRuntimeDir))
-        {
-            foreach (var dll in Directory.GetFiles(bestRuntimeDir, "*.dll"))
-            {
-                paths.Add(dll);
-            }
-        }
-
-        return paths;
+        // 2. Return all DLLs in that folder
+        return Directory.EnumerateFiles(runtimeDir, "*.dll");
     }
 
     /// <summary>

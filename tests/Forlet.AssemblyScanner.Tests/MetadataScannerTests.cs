@@ -50,60 +50,6 @@ public class MetadataScannerTests
         Assert.Throws<ScanException>(() => new MetadataScanner(nonExistentDll));
     }
 
-    [Fact]
-    public void CollectAssemblyPaths_UsesDepsJsonTargetRuntime()
-    {
-        var testDir = _fixture.GetTestDirectory();
-        var dllPath = Path.Combine(testDir, "SampleProject.dll");
-        File.WriteAllText(dllPath, string.Empty);
-
-        var depsJsonPath = Path.ChangeExtension(dllPath, ".deps.json");
-        var depsJson = """
-        {
-          "runtimeTarget": {
-            "name": ".NETCoreApp,Version=v6.0"
-          },
-          "targets": {
-            ".NETCoreApp,Version=v6.0": {
-              "Microsoft.NETCore.App/6.0.0": {
-                "runtime": {
-                  "lib/net6.0/System.Runtime.dll": {}
-                }
-              }
-            }
-          },
-          "libraries": {
-            "Microsoft.NETCore.App/6.0.0": {
-              "type": "package",
-              "path": "microsoft.netcore.app/6.0.0"
-            }
-          }
-        }
-        """;
-        File.WriteAllText(depsJsonPath, depsJson);
-
-        var dotnetRoot = Path.Combine(testDir, "dotnet");
-        var runtimeDir = Path.Combine(dotnetRoot, "shared", "Microsoft.NETCore.App", "6.0.0");
-        Directory.CreateDirectory(runtimeDir);
-        var targetRuntimeDll = Path.Combine(runtimeDir, "System.Runtime.dll");
-        File.WriteAllText(targetRuntimeDll, string.Empty);
-
-        var originalDotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
-        Environment.SetEnvironmentVariable("DOTNET_ROOT", dotnetRoot);
-
-        try
-        {
-            var paths = MetadataScanner.CollectAssemblyPaths(dllPath).ToList();
-
-            paths.Should().Contain(targetRuntimeDll);
-            paths.Should().NotContain(typeof(object).Assembly.Location);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("DOTNET_ROOT", originalDotnetRoot);
-        }
-    }
-
     #endregion
 
     #region FindTypesImplementing Tests
