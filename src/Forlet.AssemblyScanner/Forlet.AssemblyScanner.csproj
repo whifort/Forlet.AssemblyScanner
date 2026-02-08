@@ -9,7 +9,7 @@
         
         <!-- Package Information -->
         <PackageId>Forlet.AssemblyScanner</PackageId>
-        <Version>1.0.0</Version>
+        <Version>1.0.1</Version>
         <Authors>moamin</Authors>
         <Company>Whifort</Company>
         <Description>A lightweight .NET assembly scanner for discovering types by interface implementation or base class inheritance. Features auto-build detection, metadata-only loading, and optimized performance for large projects. Perfect for code generation tools, CLI scaffolders, and build-time analyzers.</Description>
