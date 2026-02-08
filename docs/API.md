@@ -221,13 +221,15 @@ var entities = scanner.FindTypesDerivedFrom(
 public Type? FindTypeByNameImplementing(
     string targetTypeName,
     string interfaceName,
-    ScanOptions? options = null)
+    ScanOptions? options = null,
+    bool matchTargetFullName = false)
 ```
 
 **Parameters:**
 - `targetTypeName` - Specific type name to find
 - `interfaceName` - Interface name the type must implement
 - `options` - Optional scanning configuration
+- `matchTargetFullName` - If true, matches target type by full name including namespace; otherwise matches by simple name only
 
 **Returns:** The found type, or null if not found
 
@@ -254,13 +256,15 @@ if (createUserCommand != null)
 public Type? FindTypeByNameImplementing(
     string targetTypeName,
     string[] interfaceNames,
-    ScanOptions? options = null)
+    ScanOptions? options = null,
+    bool matchTargetFullName = false)
 ```
 
 **Parameters:**
 - `targetTypeName` - Specific type name to find
 - `interfaceNames` - Array of interface names
 - `options` - Optional scanning configuration
+- `matchTargetFullName` - If true, matches target type by full name including namespace; otherwise matches by simple name only
 
 **Returns:** The found type, or null if not found
 
@@ -280,13 +284,15 @@ var handler = scanner.FindTypeByNameImplementing(
 public Type? FindTypeByNameDerivedFrom(
     string targetTypeName,
     string baseTypeName,
-    ScanOptions? options = null)
+    ScanOptions? options = null,
+    bool matchTargetFullName = false)
 ```
 
 **Parameters:**
 - `targetTypeName` - Specific type name to find
 - `baseTypeName` - Base class name the type must derive from
 - `options` - Optional scanning configuration
+- `matchTargetFullName` - If true, matches target type by full name including namespace; otherwise matches by simple name only
 
 **Returns:** The found type, or null if not found
 
@@ -303,13 +309,15 @@ var user = scanner.FindTypeByNameDerivedFrom("User", "Model");
 public Type? FindTypeByNameDerivedFrom(
     string targetTypeName,
     string[] baseTypeNames,
-    ScanOptions? options = null)
+    ScanOptions? options = null,
+    bool matchTargetFullName = false)
 ```
 
 **Parameters:**
 - `targetTypeName` - Specific type name to find
 - `baseTypeNames` - Array of base class names
 - `options` - Optional scanning configuration
+- `matchTargetFullName` - If true, matches target type by full name including namespace; otherwise matches by simple name only
 
 **Returns:** The found type, or null if not found
 

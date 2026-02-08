@@ -61,7 +61,7 @@ var result = await ProjectDllResolver.PrepareAssemblyAsync(domainProjectPath);
 
 using var scanner = new MetadataScanner(result.DllPath);
 
-// Check if User model exists
+// Check if User model exists (by simple name)
 var user = scanner.FindTypeByNameDerivedFrom("User", "Model");
 
 if (user != null)
@@ -74,6 +74,13 @@ else
     // Safe to generate
     GenerateUserModel();
 }
+
+// Check with full name matching (useful with namespaced types)
+var specificUser = scanner.FindTypeByNameDerivedFrom(
+    "MyApp.Models.User",
+    "MyApp.Models.Model",
+    matchTargetFullName: true
+);
 ```
 
 ---
@@ -118,6 +125,41 @@ var myAppCommands = scanner.FindTypesImplementing(
 );
 // Finds only: MyApp.Commands.ICommand
 ```
+
+### Decoupled Name Matching for FindTypeByName Methods
+
+The `FindTypeByName*` methods support independent control over target type matching versus interface/base class matching:
+
+```csharp
+using var scanner = new MetadataScanner(dllPath);
+
+// Scenario: Match target by simple name, but interface by full name
+var handler = scanner.FindTypeByNameImplementing(
+    "UserCommandHandler",  // Simple name for target type
+    "MyApp.Abstractions.ICommandHandler",  // Full name for interface
+    new ScanOptions { MatchFullName = true },  // Controls interface matching
+    matchTargetFullName: false  // Controls target type matching (independent)
+);
+
+// Scenario: Match both by full name
+var byFullName = scanner.FindTypeByNameImplementing(
+    "MyApp.Commands.UserCommandHandler",
+    "MyApp.Abstractions.ICommandHandler",
+    matchTargetFullName: true
+);
+
+// Scenario: Match target by full name, interface by simple name (default)
+var mixed = scanner.FindTypeByNameImplementing(
+    "MyApp.Commands.UserCommandHandler",  // Full name for target
+    "ICommandHandler",  // Simple name for interface
+    matchTargetFullName: true  // Target uses full name, interface uses simple name
+);
+```
+
+This decoupling is useful when you want to:
+- Use short, readable names for your target types while requiring fully-qualified interface names
+- Avoid naming conflicts by using full names for targets but simple names for base classes
+- Have different matching strategies for targets versus the interfaces/base classes they implement
 
 ### Including Abstract Classes
 

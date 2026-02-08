@@ -553,10 +553,11 @@ public sealed class MetadataScanner : IDisposable
     /// <param name="targetTypeName">Type name to find.</param>
     /// <param name="interfaceName">Interface name the type must implement.</param>
     /// <param name="options">Scanning options.</param>
+    /// <param name="matchTargetFullName">If true, matches target type by full name including namespace; otherwise matches by simple name only.</param>
     /// <returns>The found type, or null if not found.</returns>
-    public Type? FindTypeByNameImplementing(string targetTypeName, string interfaceName, ScanOptions? options = null)
+    public Type? FindTypeByNameImplementing(string targetTypeName, string interfaceName, ScanOptions? options = null, bool matchTargetFullName = false)
     {
-        return FindTypeByNameImplementing(targetTypeName, [interfaceName], options);
+        return FindTypeByNameImplementing(targetTypeName, [interfaceName], options, matchTargetFullName);
     }
 
     /// <summary>
@@ -565,8 +566,9 @@ public sealed class MetadataScanner : IDisposable
     /// <param name="targetTypeName">Type name to find.</param>
     /// <param name="interfaceNames">Interface names the type must implement.</param>
     /// <param name="options">Scanning options.</param>
+    /// <param name="matchTargetFullName">If true, matches target type by full name including namespace; otherwise matches by simple name only.</param>
     /// <returns>The found type, or null if not found.</returns>
-    public Type? FindTypeByNameImplementing(string targetTypeName, string[] interfaceNames, ScanOptions? options = null)
+    public Type? FindTypeByNameImplementing(string targetTypeName, string[] interfaceNames, ScanOptions? options = null, bool matchTargetFullName = false)
     {
         ValidateInputs(interfaceNames);
 
@@ -576,7 +578,7 @@ public sealed class MetadataScanner : IDisposable
         foreach (var type in GetLoadableTypes())
         {
             // Must match the target type name
-            if (!MatchesTypeName(type, targetTypeName, options))
+            if (!MatchesTypeName(type, targetTypeName, matchTargetFullName))
                 continue;
 
             // Must pass inclusion filters
@@ -599,10 +601,11 @@ public sealed class MetadataScanner : IDisposable
     /// <param name="targetTypeName">Type name to find.</param>
     /// <param name="baseTypeName">Base class the type must derive from.</param>
     /// <param name="options">Scanning options.</param>
+    /// <param name="matchTargetFullName">If true, matches target type by full name including namespace; otherwise matches by simple name only.</param>
     /// <returns>The found type, or null if not found.</returns>
-    public Type? FindTypeByNameDerivedFrom(string targetTypeName, string baseTypeName, ScanOptions? options = null)
+    public Type? FindTypeByNameDerivedFrom(string targetTypeName, string baseTypeName, ScanOptions? options = null, bool matchTargetFullName = false)
     {
-        return FindTypeByNameDerivedFrom(targetTypeName, [baseTypeName], options);
+        return FindTypeByNameDerivedFrom(targetTypeName, [baseTypeName], options, matchTargetFullName);
     }
 
     /// <summary>
@@ -611,8 +614,9 @@ public sealed class MetadataScanner : IDisposable
     /// <param name="targetTypeName">Type name to find.</param>
     /// <param name="baseTypeNames">Base class names the type must derive from.</param>
     /// <param name="options">Scanning options.</param>
+    /// <param name="matchTargetFullName">If true, matches target type by full name including namespace; otherwise matches by simple name only.</param>
     /// <returns>The found type, or null if not found.</returns>
-    public Type? FindTypeByNameDerivedFrom(string targetTypeName, string[] baseTypeNames, ScanOptions? options = null)
+    public Type? FindTypeByNameDerivedFrom(string targetTypeName, string[] baseTypeNames, ScanOptions? options = null, bool matchTargetFullName = false)
     {
         ValidateInputs(baseTypeNames);
 
@@ -622,7 +626,7 @@ public sealed class MetadataScanner : IDisposable
         foreach (var type in GetLoadableTypes())
         {
             // Must match the target type name
-            if (!MatchesTypeName(type, targetTypeName, options))
+            if (!MatchesTypeName(type, targetTypeName, matchTargetFullName))
                 continue;
 
             // Must pass inclusion filters
@@ -684,12 +688,12 @@ public sealed class MetadataScanner : IDisposable
     }
 
     /// <summary>
-    /// Checks if a type's name matches the target name, respecting the MatchFullName option.
-    /// For generic types with MatchFullName, handles the mangled FullName format.
+    /// Checks if a type's name matches the target name, respecting the matchFullName flag.
+    /// For generic types with matchFullName=true, handles the mangled FullName format.
     /// </summary>
-    private static bool MatchesTypeName(Type type, string typeName, ScanOptions? options)
+    private static bool MatchesTypeName(Type type, string typeName, bool matchFullName)
     {
-        if (options?.MatchFullName == true)
+        if (matchFullName)
         {
             var fullName = type.FullName ?? type.Name;
 
@@ -710,6 +714,13 @@ public sealed class MetadataScanner : IDisposable
 
         return type.Name == typeName;
     }
+
+    /// <summary>
+    /// Checks if a type's name matches the target name, respecting the MatchFullName option.
+    /// For generic types with MatchFullName, handles the mangled FullName format.
+    /// </summary>
+    private static bool MatchesTypeName(Type type, string typeName, ScanOptions? options)
+        => MatchesTypeName(type, typeName, options?.MatchFullName == true);
 
     /// <summary>
     /// Checks if a type implements the specified interface (by name).

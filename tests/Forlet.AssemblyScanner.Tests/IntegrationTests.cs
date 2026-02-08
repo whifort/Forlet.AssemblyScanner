@@ -211,4 +211,202 @@ public class IntegrationTests
     }
 
     #endregion
+
+    #region MatchTargetFullName Tests
+
+    [Fact]
+    public async Task FindTypeByNameImplementing_MatchTargetFullNameTrue_MatchesByFullName()
+    {
+        // Arrange - Create project with namespaced type
+        var builder = new TestProjectBuilder("TestProject");
+        builder.AddInterface("ICommand");
+        builder.AddClass("CreateCommand", "ICommand");
+        var csprojPath = builder.Build(_fixture.GetTestDirectory());
+
+        // Act - Build and scan
+        var buildResult = await ProjectDllResolver.PrepareAssemblyAsync(csprojPath);
+        using var scanner = new MetadataScanner(buildResult.DllPath);
+
+        // Assert - Full name match should find the type
+        var found = scanner.FindTypeByNameImplementing(
+            "TestProject.CreateCommand",
+            "ICommand",
+            matchTargetFullName: true
+        );
+
+        found.Should().NotBeNull();
+        found!.Name.Should().Be("CreateCommand");
+        found.FullName.Should().Be("TestProject.CreateCommand");
+    }
+
+    [Fact]
+    public async Task FindTypeByNameImplementing_MatchTargetFullNameFalse_MatchesBySimpleName()
+    {
+        // Arrange - Create project with namespaced type
+        var builder = new TestProjectBuilder("TestProject");
+        builder.AddInterface("ICommand");
+        builder.AddClass("CreateCommand", "ICommand");
+        var csprojPath = builder.Build(_fixture.GetTestDirectory());
+
+        // Act - Build and scan
+        var buildResult = await ProjectDllResolver.PrepareAssemblyAsync(csprojPath);
+        using var scanner = new MetadataScanner(buildResult.DllPath);
+
+        // Assert - Simple name match should find the type (default behavior)
+        var found = scanner.FindTypeByNameImplementing(
+            "CreateCommand",
+            "ICommand",
+            matchTargetFullName: false
+        );
+
+        found.Should().NotBeNull();
+        found!.Name.Should().Be("CreateCommand");
+    }
+
+    [Fact]
+    public async Task FindTypeByNameImplementing_MatchTargetFullNameFalse_DoesNotMatchFullName()
+    {
+        // Arrange - Create project with namespaced type
+        var builder = new TestProjectBuilder("TestProject");
+        builder.AddInterface("ICommand");
+        builder.AddClass("CreateCommand", "ICommand");
+        var csprojPath = builder.Build(_fixture.GetTestDirectory());
+
+        // Act - Build and scan
+        var buildResult = await ProjectDllResolver.PrepareAssemblyAsync(csprojPath);
+        using var scanner = new MetadataScanner(buildResult.DllPath);
+
+        // Assert - Simple name matching should NOT match when looking for full name
+        var found = scanner.FindTypeByNameImplementing(
+            "TestProject.CreateCommand",  // Full name with matchTargetFullName=false
+            "ICommand",
+            matchTargetFullName: false
+        );
+
+        found.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task FindTypeByNameImplementing_MatchTargetFullNameTrue_DoesNotMatchSimpleName()
+    {
+        // Arrange - Create project with namespaced type
+        var builder = new TestProjectBuilder("TestProject");
+        builder.AddInterface("ICommand");
+        builder.AddClass("CreateCommand", "ICommand");
+        var csprojPath = builder.Build(_fixture.GetTestDirectory());
+
+        // Act - Build and scan
+        var buildResult = await ProjectDllResolver.PrepareAssemblyAsync(csprojPath);
+        using var scanner = new MetadataScanner(buildResult.DllPath);
+
+        // Assert - Full name matching should NOT match when looking for simple name
+        var found = scanner.FindTypeByNameImplementing(
+            "CreateCommand",  // Simple name with matchTargetFullName=true
+            "ICommand",
+            matchTargetFullName: true
+        );
+
+        found.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task FindTypeByNameDerivedFrom_MatchTargetFullNameTrue_MatchesByFullName()
+    {
+        // Arrange - Create project with base class and derived class
+        var builder = new TestProjectBuilder("TestProject");
+        builder.AddClass("Entity");
+        builder.AddClass("User", inherits: "Entity");
+        var csprojPath = builder.Build(_fixture.GetTestDirectory());
+
+        // Act - Build and scan
+        var buildResult = await ProjectDllResolver.PrepareAssemblyAsync(csprojPath);
+        using var scanner = new MetadataScanner(buildResult.DllPath);
+
+        // Assert - Full name match should find the type
+        var found = scanner.FindTypeByNameDerivedFrom(
+            "TestProject.User",
+            "Entity",
+            matchTargetFullName: true
+        );
+
+        found.Should().NotBeNull();
+        found!.Name.Should().Be("User");
+        found.FullName.Should().Be("TestProject.User");
+    }
+
+    [Fact]
+    public async Task FindTypeByNameDerivedFrom_MatchTargetFullNameFalse_MatchesBySimpleName()
+    {
+        // Arrange - Create project with base class and derived class
+        var builder = new TestProjectBuilder("TestProject");
+        builder.AddClass("Entity");
+        builder.AddClass("User", inherits: "Entity");
+        var csprojPath = builder.Build(_fixture.GetTestDirectory());
+
+        // Act - Build and scan
+        var buildResult = await ProjectDllResolver.PrepareAssemblyAsync(csprojPath);
+        using var scanner = new MetadataScanner(buildResult.DllPath);
+
+        // Assert - Simple name match should find the type (default behavior)
+        var found = scanner.FindTypeByNameDerivedFrom(
+            "User",
+            "Entity",
+            matchTargetFullName: false
+        );
+
+        found.Should().NotBeNull();
+        found!.Name.Should().Be("User");
+    }
+
+    [Fact]
+    public async Task FindTypeByNameImplementing_MatchTargetFullNameIndependentFromMatchFullName()
+    {
+        // Arrange - Create project with types in different namespaces
+        var builder = new TestProjectBuilder("TestProject");
+        builder.AddInterface("ICommand");
+        builder.AddClass("CreateCommand", "ICommand");
+        var csprojPath = builder.Build(_fixture.GetTestDirectory());
+
+        // Act - Build and scan
+        var buildResult = await ProjectDllResolver.PrepareAssemblyAsync(csprojPath);
+        using var scanner = new MetadataScanner(buildResult.DllPath);
+
+        // Assert - matchTargetFullName=false + options.MatchFullName=true
+        // Target type matched by short name, interface matched by full name
+        var found = scanner.FindTypeByNameImplementing(
+            "CreateCommand",  // Simple name for target type
+            "TestProject.ICommand",  // Full name for interface
+            new ScanOptions { MatchFullName = true },
+            matchTargetFullName: false  // Use simple name matching for target
+        );
+
+        found.Should().NotBeNull();
+        found!.Name.Should().Be("CreateCommand");
+    }
+
+    [Fact]
+    public async Task FindTypeByNameImplementing_MatchTargetFullNameTrue_WithInterfaceSimpleName()
+    {
+        // Arrange - Create project with namespaced type
+        var builder = new TestProjectBuilder("TestProject");
+        builder.AddInterface("ICommand");
+        builder.AddClass("CreateCommand", "ICommand");
+        var csprojPath = builder.Build(_fixture.GetTestDirectory());
+
+        // Act - Build and scan
+        var buildResult = await ProjectDllResolver.PrepareAssemblyAsync(csprojPath);
+        using var scanner = new MetadataScanner(buildResult.DllPath);
+
+        // Assert - matchTargetFullName=true for target, simple name for interface
+        var found = scanner.FindTypeByNameImplementing(
+            "TestProject.CreateCommand",  // Full name for target type
+            "ICommand",  // Simple name for interface
+            matchTargetFullName: true
+        );
+
+        found.Should().NotBeNull();
+        found!.Name.Should().Be("CreateCommand");
+    }
+
+    #endregion
 }
