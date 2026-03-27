@@ -118,6 +118,34 @@ var types = scanner.FindTypesImplementing(
 - .NET 8.0 or higher
 - `dotnet` CLI available in PATH (for build functionality)
 
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DOTNET_ROOT` | Standard .NET env var — primary hint for the .NET installation root |
+| `DOTNET_ROOT_X64` / `DOTNET_ROOT_ARM64` | Architecture-specific installation root overrides (standard .NET) |
+| `FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR` | **Direct override** — set to the exact directory containing BCL DLLs (e.g. `/lib/dotnet/shared/Microsoft.NETCore.App/8.0.10/`). Takes precedence over all other discovery strategies. Use this when automatic discovery fails in non-standard environments. |
+
+### Self-contained / Single-file Publish
+
+`MetadataScanner` fully supports host tools published as self-contained single-file executables (`PublishSingleFile=true`, `SelfContained=true`). Runtime assemblies are located via the following strategies, in order:
+
+1. `FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR` (explicit override)
+2. `DOTNET_ROOT` / `DOTNET_ROOT_X64` / `DOTNET_ROOT_ARM64`
+3. The `dotnet` executable found in `PATH` (symlinks resolved to the install root)
+4. OS-specific well-known installation paths (Windows, Linux, macOS)
+5. `RuntimeEnvironment.GetRuntimeDirectory()` fallback
+
+If scanning fails in a non-standard environment, set `FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR` to the runtime DLL directory to resolve it without any code changes:
+
+```bash
+# Linux example
+export FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR=/lib/dotnet/shared/Microsoft.NETCore.App/8.0.10
+
+# Windows example
+$env:FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR = "C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.10"
+```
+
 ## Documentation
 
 - [Usage Guide](docs/USAGE.md) — Patterns, examples, and best practices

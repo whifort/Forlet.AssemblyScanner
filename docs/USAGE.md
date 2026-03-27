@@ -10,6 +10,7 @@ Comprehensive guide with practical examples for using Forlet.AssemblyScanner.
 4. [Error Handling](#error-handling)
 5. [Common Patterns](#common-patterns)
 6. [Best Practices](#best-practices)
+7. [Self-contained and Single-file Publish](#self-contained-and-single-file-publish)
 
 ---
 
@@ -654,6 +655,51 @@ var resolveResult = await ProjectDllResolver.PrepareAssemblyAsync(
 ### Issue: Runtime assemblies are resolved from the wrong framework
 
 **Solution:** Ensure the `.deps.json` file exists next to the DLL and matches the intended target framework/runtime version. `MetadataScanner` uses the `.deps.json` runtime target to prioritize assemblies from the matching runtime before falling back to the current runtime.
+
+---
+
+## Self-contained and Single-file Publish
+
+When your host tool is published as a self-contained single-file executable (`PublishSingleFile=true`, `SelfContained=true`), the standard `typeof(object).Assembly.Location` approach returns an empty string because managed assemblies are bundled inside the executable rather than extracted to disk as separate files. `MetadataScanner` handles this automatically by probing well-known .NET installation paths on all platforms.
+
+### How Runtime Discovery Works
+
+Runtime assemblies are located via the following strategies, in order:
+
+| Priority | Strategy | Notes |
+|----------|----------|-------|
+| 0 | `FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR` env var | Direct path override — highest priority |
+| 1 | Target framework info from `.deps.json` + OS path probing | Uses parsed framework/version to find the best match |
+| 2 | `typeof(object).Assembly.Location` | Works in framework-dependent mode; empty in single-file |
+| 3 | `RuntimeEnvironment.GetRuntimeDirectory()` | Works in framework-dependent and extraction scenarios |
+| 4 | OS path probing (no version hint) | Fallback when target framework info is unavailable |
+| 5 | `AppContext.BaseDirectory` | Last resort |
+
+OS path probing checks (in order): `DOTNET_ROOT` / `DOTNET_ROOT_X64` / `DOTNET_ROOT_ARM64` → `dotnet` executable in `PATH` (symlinks resolved) → well-known OS-specific installation directories.
+
+### Troubleshooting: Scanning Fails After Single-file Publish
+
+If automatic discovery cannot locate the runtime assemblies (e.g., non-standard install location, air-gapped environment, or unusual OS configuration), set `FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR` to point directly at the directory containing the BCL DLLs:
+
+```bash
+# Linux — find the correct path first
+ls /lib/dotnet/shared/Microsoft.NETCore.App/
+# e.g., output: 8.0.10
+
+export FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR=/lib/dotnet/shared/Microsoft.NETCore.App/8.0.10
+```
+
+```powershell
+# Windows
+$env:FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR = "C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.10"
+```
+
+```bash
+# macOS (Apple Silicon with Homebrew)
+export FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR=/opt/homebrew/share/dotnet/shared/Microsoft.NETCore.App/8.0.10
+```
+
+The scanner uses this directory immediately, bypassing all other discovery strategies.
 
 ---
 

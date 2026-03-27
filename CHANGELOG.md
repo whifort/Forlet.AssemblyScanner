@@ -5,6 +5,15 @@ All notable changes to Forlet.AssemblyScanner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-03-27
+
+### Fixed
+- **Runtime assembly resolution in self-contained / single-file publish**: Restored full OS-path probing in `FindDotNetRuntimePaths` that was removed in v1.0.1. `MetadataScanner` now searches `DOTNET_ROOT`, `DOTNET_ROOT_X64`, `DOTNET_ROOT_ARM64`, the `dotnet` executable in `PATH` (with symlink resolution), and well-known installation paths on Windows, Linux, and macOS before falling back to `RuntimeEnvironment.GetRuntimeDirectory()`. This fixes all scanning operations when the host tool is published as a self-contained single file.
+- **Missing try-catch on Strategy 1 and Strategy 4**: `GetRuntimeAssemblyPaths` now wraps both calls to `FindDotNetRuntimePaths` in try-catch so a failure in one strategy cannot abort the entire resolution chain.
+
+### Added
+- **`FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR` environment variable**: Escape-hatch override that lets users point `MetadataScanner` directly at a runtime DLL directory (e.g. `/lib/dotnet/shared/Microsoft.NETCore.App/8.0.10/`) for non-standard or unusual environments. Takes effect before all other resolution strategies.
+
 ## [1.0.1] - 2026-02-08
 
 ### Added
@@ -57,5 +66,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[1.0.2]: https://github.com/whifort/Forlet.AssemblyScanner/releases/tag/v1.0.2
 [1.0.1]: https://github.com/whifort/Forlet.AssemblyScanner/releases/tag/v1.0.1
 [1.0.0]: https://github.com/whifort/Forlet.AssemblyScanner/releases/tag/v1.0.0

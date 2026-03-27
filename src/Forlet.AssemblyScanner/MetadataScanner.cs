@@ -108,10 +108,12 @@ public sealed class MetadataScanner : IDisposable
     {
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Strategy 1: Use target runtime data when provided
-        if (!string.IsNullOrWhiteSpace(targetFrameworkMoniker) || !string.IsNullOrWhiteSpace(runtimeVersion))
+        // Strategy 0: User-specified override — direct path to a directory containing runtime DLLs.
+        // Set FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR=/path/to/shared/Microsoft.NETCore.App/8.0.x/
+        var overrideDir = Environment.GetEnvironmentVariable("FORLET_ASSEMBLY_SCANNER_RUNTIME_DIR");
+        if (!string.IsNullOrEmpty(overrideDir) && Directory.Exists(overrideDir))
         {
-            foreach (var dll in FindDotNetRuntimePaths(targetFrameworkMoniker, runtimeVersion))
+            foreach (var dll in Directory.GetFiles(overrideDir, "*.dll"))
             {
                 paths.Add(dll);
             }
@@ -122,21 +124,28 @@ public sealed class MetadataScanner : IDisposable
             }
         }
 
-        // Strategy 2: Use the directory containing the core library from current runtime
-        var coreLibPath = typeof(object).Assembly.Location;
-        if (!string.IsNullOrEmpty(coreLibPath) && File.Exists(coreLibPath))
+        // Strategy 1: Use target runtime data when provided
+        if (!string.IsNullOrWhiteSpace(targetFrameworkMoniker) || !string.IsNullOrWhiteSpace(runtimeVersion))
         {
-            var runtimeDir = Path.GetDirectoryName(coreLibPath);
-            if (!string.IsNullOrEmpty(runtimeDir) && Directory.Exists(runtimeDir))
+            try
             {
-                foreach (var dll in Directory.GetFiles(runtimeDir, "*.dll"))
+                foreach (var dll in FindDotNetRuntimePaths(targetFrameworkMoniker, runtimeVersion))
                 {
                     paths.Add(dll);
                 }
             }
+            catch
+            {
+                // FindDotNetRuntimePaths may fail in unusual environments; continue to next strategy
+            }
+
+            if (paths.Count > 0)
+            {
+                return paths;
+            }
         }
 
-        // Strategy 3: Use RuntimeEnvironment.GetRuntimeDirectory()
+        // Strategy 2: Use RuntimeEnvironment.GetRuntimeDirectory()
         try
         {
             var runtimeEnvDir = RuntimeEnvironment.GetRuntimeDirectory();
@@ -153,14 +162,20 @@ public sealed class MetadataScanner : IDisposable
             // RuntimeEnvironment.GetRuntimeDirectory() is not available on all platforms; skip gracefully
         }
 
-        // Strategy 4: Find .NET runtime from DOTNET_ROOT or default installation paths
-        var dotnetRuntimePaths = FindDotNetRuntimePaths(null, null);
-        foreach (var dll in dotnetRuntimePaths)
+        // Strategy 3: Find .NET runtime from DOTNET_ROOT or default installation paths
+        try
         {
-            paths.Add(dll);
+            foreach (var dll in FindDotNetRuntimePaths(null, null))
+            {
+                paths.Add(dll);
+            }
+        }
+        catch
+        {
+            // FindDotNetRuntimePaths may fail in unusual environments; continue to next strategy
         }
 
-        // Strategy 5: Use AppContext.BaseDirectory as another fallback
+        // Strategy 4: Use AppContext.BaseDirectory as another fallback
         try
         {
             var baseDir = AppContext.BaseDirectory;
@@ -181,15 +196,181 @@ public sealed class MetadataScanner : IDisposable
     }
 
     /// <summary>
-    /// Finds .NET runtime assemblies from standard installation locations.
+    /// Finds .NET runtime assemblies by probing DOTNET_ROOT, the dotnet executable in PATH,
+    /// and well-known installation locations for the current OS.
     /// </summary>
     private static IEnumerable<string> FindDotNetRuntimePaths(string? targetFrameworkMoniker, string? runtimeVersion)
     {
-        // 1. Get the directory of the ACTIVE runtime (Resilient & Cross-platform)
-        string runtimeDir = RuntimeEnvironment.GetRuntimeDirectory();
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var targetVersion = GetTargetFrameworkVersion(targetFrameworkMoniker) ?? (Environment.Version.Major + ".0");
 
-        // 2. Return all DLLs in that folder
-        return Directory.EnumerateFiles(runtimeDir, "*.dll");
+        foreach (var dotnetRoot in GetDotNetRootCandidates())
+        {
+            var runtimesDir = Path.Combine(dotnetRoot, "shared", "Microsoft.NETCore.App");
+            if (!Directory.Exists(runtimesDir))
+                continue;
+
+            string? bestDir = null;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(runtimeVersion))
+                {
+                    var exact = Path.Combine(runtimesDir, runtimeVersion);
+                    if (Directory.Exists(exact))
+                        bestDir = exact;
+                }
+
+                if (bestDir == null)
+                {
+                    bestDir = Directory.GetDirectories(runtimesDir)
+                        .Select(d => new { Path = d, Name = Path.GetFileName(d) })
+                        .Where(d => d.Name.StartsWith(targetVersion, StringComparison.Ordinal)
+                            || d.Name.StartsWith(Environment.Version.Major + ".", StringComparison.Ordinal))
+                        .OrderByDescending(d => d.Name, StringComparer.Ordinal)
+                        .FirstOrDefault()?.Path
+                        ?? Directory.GetDirectories(runtimesDir)
+                            .OrderByDescending(Path.GetFileName, StringComparer.Ordinal)
+                            .FirstOrDefault();
+                }
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (bestDir != null && Directory.Exists(bestDir))
+            {
+                foreach (var dll in Directory.GetFiles(bestDir, "*.dll"))
+                {
+                    paths.Add(dll);
+                }
+            }
+        }
+
+        // Final fallback: RuntimeEnvironment.GetRuntimeDirectory() works in framework-dependent
+        // and in self-contained single-file mode (points to the extraction temp directory)
+        if (paths.Count == 0)
+        {
+            try
+            {
+                var runtimeDir = RuntimeEnvironment.GetRuntimeDirectory();
+                if (!string.IsNullOrEmpty(runtimeDir) && Directory.Exists(runtimeDir))
+                {
+                    foreach (var dll in Directory.GetFiles(runtimeDir, "*.dll"))
+                    {
+                        paths.Add(dll);
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore
+            }
+        }
+
+        return paths;
+    }
+
+    /// <summary>
+    /// Returns candidate .NET installation root directories in priority order.
+    /// Probes environment variables, PATH symlink resolution, and OS-specific well-known paths.
+    /// </summary>
+    private static IEnumerable<string> GetDotNetRootCandidates()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. Official .NET environment variables (highest priority)
+        foreach (var envVar in new[] { "DOTNET_ROOT", "DOTNET_ROOT_X64", "DOTNET_ROOT_ARM64" })
+        {
+            var envRoot = Environment.GetEnvironmentVariable(envVar);
+            if (!string.IsNullOrEmpty(envRoot) && Directory.Exists(envRoot) && seen.Add(envRoot))
+                yield return envRoot;
+        }
+
+        // 2. Resolve via the dotnet executable in PATH (catches any install location,
+        //    including Ubuntu /lib/dotnet symlinked from /usr/bin/dotnet)
+        var fromPath = FindDotNetInstallDirFromPath();
+        if (fromPath != null && Directory.Exists(fromPath) && seen.Add(fromPath))
+            yield return fromPath;
+
+        // 3. OS-specific well-known installation locations
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            foreach (var p in new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "dotnet"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "dotnet"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet"),
+            })
+            {
+                if (Directory.Exists(p) && seen.Add(p))
+                    yield return p;
+            }
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            foreach (var p in new[]
+            {
+                "/usr/local/share/dotnet",
+                "/opt/homebrew/share/dotnet",
+                "/opt/homebrew/opt/dotnet/libexec",
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet"),
+            })
+            {
+                if (Directory.Exists(p) && seen.Add(p))
+                    yield return p;
+            }
+        }
+        else
+        {
+            // Linux: covers Ubuntu 22.04+ apt, Microsoft packages, Fedora/RHEL,
+            //        manual installs, snap, enterprise paths, and user installs
+            foreach (var p in new[]
+            {
+                "/lib/dotnet",
+                "/usr/lib/dotnet",
+                "/usr/share/dotnet",
+                "/usr/local/share/dotnet",
+                "/opt/dotnet",
+                "/snap/dotnet-sdk/current",
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet"),
+            })
+            {
+                if (Directory.Exists(p) && seen.Add(p))
+                    yield return p;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Finds the .NET installation directory by locating the dotnet executable in PATH
+    /// and resolving any symlinks to the real install root.
+    /// </summary>
+    private static string? FindDotNetInstallDirFromPath()
+    {
+        try
+        {
+            var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+            var exeName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "dotnet.exe" : "dotnet";
+            foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var candidate = Path.Combine(dir, exeName);
+                if (!File.Exists(candidate))
+                    continue;
+
+                // Resolve symlinks to find the true install root
+                // e.g. /usr/bin/dotnet → /lib/dotnet/dotnet → install root is /lib/dotnet
+                var resolved = new FileInfo(candidate).ResolveLinkTarget(returnFinalTarget: true);
+                return resolved != null ? Path.GetDirectoryName(resolved.FullName) : dir;
+            }
+        }
+        catch
+        {
+            // Ignore any filesystem errors
+        }
+
+        return null;
     }
 
     /// <summary>
