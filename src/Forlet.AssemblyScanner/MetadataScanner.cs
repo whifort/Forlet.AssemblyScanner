@@ -162,17 +162,23 @@ public sealed class MetadataScanner : IDisposable
             // RuntimeEnvironment.GetRuntimeDirectory() is not available on all platforms; skip gracefully
         }
 
-        // Strategy 3: Find .NET runtime from DOTNET_ROOT or default installation paths
-        try
+        // Strategy 3: Find .NET runtime from DOTNET_ROOT or default installation paths.
+        // Only runs when Strategy 2 found nothing — prevents mixing DLLs from two different
+        // version directories (e.g. RuntimeEnvironment returning 8.0.10 and OS paths finding
+        // 8.0.11), which causes MetadataLoadContext to throw FileLoadException.
+        if (paths.Count == 0)
         {
-            foreach (var dll in FindDotNetRuntimePaths(null, null))
+            try
             {
-                paths.Add(dll);
+                foreach (var dll in FindDotNetRuntimePaths(null, null))
+                {
+                    paths.Add(dll);
+                }
             }
-        }
-        catch
-        {
-            // FindDotNetRuntimePaths may fail in unusual environments; continue to next strategy
+            catch
+            {
+                // FindDotNetRuntimePaths may fail in unusual environments; continue to next strategy
+            }
         }
 
         // Strategy 4: Use AppContext.BaseDirectory as another fallback
@@ -222,15 +228,22 @@ public sealed class MetadataScanner : IDisposable
 
                 if (bestDir == null)
                 {
+                    // Only pick a version that matches the target framework or the current
+                    // runtime major version — never fall back to an arbitrary version, since
+                    // that would break MetadataLoadContext with a mismatched BCL set.
+                    // Sort by parsed Version (semantic) so 8.0.11 > 8.0.9 > 8.0.8, not
+                    // lexicographic where "8.0.9" > "8.0.11".
                     bestDir = Directory.GetDirectories(runtimesDir)
-                        .Select(d => new { Path = d, Name = Path.GetFileName(d) })
+                        .Select(d => new
+                        {
+                            Path = d,
+                            Name = Path.GetFileName(d),
+                            Parsed = Version.TryParse(Path.GetFileName(d), out var v) ? v : null
+                        })
                         .Where(d => d.Name.StartsWith(targetVersion, StringComparison.Ordinal)
                             || d.Name.StartsWith(Environment.Version.Major + ".", StringComparison.Ordinal))
-                        .OrderByDescending(d => d.Name, StringComparer.Ordinal)
-                        .FirstOrDefault()?.Path
-                        ?? Directory.GetDirectories(runtimesDir)
-                            .OrderByDescending(Path.GetFileName, StringComparer.Ordinal)
-                            .FirstOrDefault();
+                        .OrderByDescending(d => d.Parsed)
+                        .FirstOrDefault()?.Path;
                 }
             }
             catch
@@ -244,6 +257,12 @@ public sealed class MetadataScanner : IDisposable
                 {
                     paths.Add(dll);
                 }
+
+                // Stop at the first candidate that yields DLLs — mixing assemblies from
+                // multiple version directories causes MetadataLoadContext to throw
+                // FileLoadException (same assembly identity loaded from two different paths)
+                if (paths.Count > 0)
+                    break;
             }
         }
 
